@@ -14,11 +14,15 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   tf
+  image_transport
+  sensor_msgs
+  cv_bridge
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(OpenCV REQUIRED)
+message(STATUS "OpenCV_DIR: " ${OpenCV_DIR})
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -140,6 +144,7 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/stereo_compute_node.cpp)
 add_executable(stereo_compute_node 
     src/stereo_compute_node.cpp
+    src/stereo_compute.cpp
     )
 
 
