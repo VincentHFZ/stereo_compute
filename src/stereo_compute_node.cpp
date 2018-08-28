@@ -45,12 +45,7 @@ int main(int argc, char** argv)
     else
         method = USE_SURF;
 
-    // std::cout << "method: " << method << " " << param << " " << argc << std::endl;
-
     StereoCompute stereo_compute(nh, method);
 
-    while(ros::ok())
-    {
-        ros::spinOnce();
-    }
+    ros::spin();
 }

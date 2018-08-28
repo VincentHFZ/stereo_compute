@@ -23,7 +23,7 @@ StereoCompute::~StereoCompute()
 {
 }
 
-// get raw image
+// get raw image and compute sterep pose
 void StereoCompute::getSensorImageCallback(const sensor_msgs::ImageConstPtr& image_msg)
 {
     cv_bridge::CvImageConstPtr cv_ptr;
@@ -44,19 +44,16 @@ void StereoCompute::getSensorImageCallback(const sensor_msgs::ImageConstPtr& ima
     roi_l.copyTo(image_left_);
     roi_r.copyTo(image_right_);
 
-    computePose();
-    // computePose(USE_SIFT);
-    // computePose(USE_SURF);
-    // computePose(USE_ORB);
-
-    pubCloudPoints();
+    computePose();                                          // 计算位姿
+    pubCloudPoints();                                       // 发布点云数据
 
     // debug
-    cv::imshow("image_left", image_left_);
-    cv::imshow("image_right", image_right_);
-    cv::waitKey(1);
+//    cv::imshow("image_left", image_left_);
+//    cv::imshow("image_right", image_right_);
+//    cv::waitKey(1);
 }
 
+// 加载相机参数
 void StereoCompute::getCameraParams(void)
 {
     camParamL.create(3, 3);
@@ -78,6 +75,7 @@ void StereoCompute::getCameraParams(void)
     matrixT.create(3, 1);
     matrixT << -98.8830, -0.3284, -0.6657;
 
+    // debug
     std::cout << "camParamL: \n" << camParamL << std::endl;
     std::cout << "camParamR: \n" << camParamR << std::endl;
     std::cout << "disPraramL: \n" << distParamL << std::endl;
@@ -98,6 +96,7 @@ void StereoCompute::calibImages(void)
     cv::initUndistortRectifyMap(camParamR, distParamR, R2, P2, image_size_, CV_32FC1, mapRx, mapRy);
 }
 
+// 使用 sift 提取特征点和特征描述符
 void StereoCompute::useSift(void)
 {
     key_points_l.clear();
@@ -112,6 +111,7 @@ void StereoCompute::useSift(void)
     extractor.compute(image_right_, key_points_r, descriptors_r);
 }
 
+// 使用 surf 提取特征点和特征描述符
 void StereoCompute::useSurf(void)
 {
     key_points_l.clear();
@@ -126,6 +126,7 @@ void StereoCompute::useSurf(void)
     extractor.compute(image_right_, key_points_r, descriptors_r);
 }
 
+// 使用 orb 提取特征点和特征描述符
 void StereoCompute::useOrb(void)
 {
     key_points_l.clear();
@@ -138,11 +139,12 @@ void StereoCompute::useOrb(void)
     orb.compute(image_right_, key_points_r, descriptors_r);
 }
 
+// 特征点匹配
 void StereoCompute::matchKeypoints(void)
 {
     matches.clear();
-    src_l.clear();
-    src_r.clear();
+    points_l.clear();
+    points_r.clear();
     // 匹配特征点，主要计算两个特征点特征向量的欧式距离，当距离小于某个阈值时则认为无匹配
     cv::BruteForceMatcher<cv::L2<float> > matcher;
     matcher.match(descriptors_l, descriptors_r, matches);
@@ -184,22 +186,24 @@ void StereoCompute::matchKeypoints(void)
     }
 
     // debug
-    cv::Mat image_RR_matches;
-    cv::drawMatches(image_left_, RR_keypoints_l,
-                    image_right_, RR_keypoints_r,
-                    RR_matches, image_RR_matches);
-    cv::imshow("result", image_RR_matches);
+//    cv::Mat image_RR_matches;
+//    cv::drawMatches(image_left_, RR_keypoints_l,
+//                    image_right_, RR_keypoints_r,
+//                    RR_matches, image_RR_matches);
+//    cv::imshow("result", image_RR_matches);
 
     for(size_t i = 0; i < RR_keypoints_l.size(); i++)
     {
-        src_l.push_back(RR_keypoints_l[i].pt);
-        src_r.push_back(RR_keypoints_r[i].pt);
+        points_l.push_back(RR_keypoints_l[i].pt);
+        points_r.push_back(RR_keypoints_r[i].pt);
     }
 
 }
 
+// 计算位姿
 int StereoCompute::computePose(void)
 {
+    // 判断是否有图像
     if(image_left_.empty())
     {
         ROS_WARN("No left camera's image");
@@ -215,6 +219,7 @@ int StereoCompute::computePose(void)
     cv::remap(image_left_.clone(), image_left_, mapLx, mapLy, cv::INTER_LINEAR);
     cv::remap(image_right_.clone(), image_right_, mapRx, mapRy, cv::INTER_LINEAR);
 
+    // 提取特征点
     if(method_ == USE_SIFT)
         useSift();
     else if(method_ == USE_SURF)
@@ -227,24 +232,25 @@ int StereoCompute::computePose(void)
         return -2;
     }
 
+    // 匹配特征点
     matchKeypoints();
 
+    // 立体结算
     cv::Matx44f _Q;
     Q.convertTo(_Q, CV_64F);
 
     cv::Vec3f _3d_point;
     _3d_points.clear();
-    // std::cout << _3d_points.size() << std::endl;
-    // std::cout << "src_l.size: " << src_l.size() << std::endl;
-    for(size_t i = 0; i < src_l.size(); i++)
+    for(size_t i = 0; i < points_l.size(); i++)
     {
-        double d = src_l[i].x - src_r[i].x;
-        cv::Vec4f homg_pt = _Q * cv::Vec4f(src_l[i].x, src_l[i].y, d, 1);
+        double d = points_l[i].x - points_r[i].x;
+        cv::Vec4f homg_pt = _Q * cv::Vec4f(points_l[i].x, points_l[i].y, d, 1);
         _3d_point = cv::Vec3f(homg_pt.val);
         _3d_point /= homg_pt[3];
 
         _3d_points.push_back(_3d_point);
 
+        // debug s
 //        std::cout << "_3dPoints: \t"
 //                  << "x: " << _3d_point[0] << "\t"
 //                  << "y: " << _3d_point[1] << "\t"
@@ -255,6 +261,7 @@ int StereoCompute::computePose(void)
     return 0;
 }
 
+// 发布点云数据
 void StereoCompute::pubCloudPoints(void)
 {
     sensor_msgs::PointCloud point_clouds;

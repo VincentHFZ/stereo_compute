@@ -31,7 +31,6 @@ class StereoCompute
 public:
     StereoCompute(ros::NodeHandle nh, int method);
     ~StereoCompute();
-
 public:
 
 private:
@@ -82,10 +81,8 @@ private:
     std::vector<cv::KeyPoint> key_points_l, key_points_r;
     cv::Mat descriptors_l, descriptors_r;
     std::vector<cv::DMatch> matches;
-    std::vector<cv::Point2f> src_l, src_r;
+    std::vector<cv::Point2f> points_l, points_r;
     std::vector<cv::Vec3f> _3d_points;
-    // std::vector<cv::Point2f> dst_l, dst_r;
-
 };
 
 
